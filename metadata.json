@@ -1,0 +1,6 @@
+{
+  "name": "Gemini Chat",
+  "description": "تطبيق محادثة ذكي وسريع بالذكاء الاصطناعي مع Google Gemini باللغتين العربية والإنجليزية",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

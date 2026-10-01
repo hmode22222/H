@@ -1,0 +1,32 @@
+<resources>
+    <string name="app_name">Gemini Chat</string>
+    <string name="chat_title">Gemini AI</string>
+    <string name="subtitle">الذكاء الاصطناعي السريع والخفيف</string>
+    <string name="new_chat">محادثة جديدة</string>
+    <string name="type_message_hint">اكتب سؤالك هنا... (عربي أو English)</string>
+    <string name="send">إرسال</string>
+    <string name="clear_chat">مسح الرسائل</string>
+    <string name="copy">نسخ</string>
+    <string name="copied">تم النسخ بنجاح</string>
+    <string name="delete">حذف</string>
+    <string name="conversations">المحادثات السابقة</string>
+    <string name="no_conversations">لا توجد محادثات سابقة</string>
+    <string name="settings">الإعدادات ومفتاح API</string>
+    <string name="api_key_dialog_title">مفتاح Google Gemini API</string>
+    <string name="api_key_desc">يمكن استخدام المفتاح المحقون تلقائياً، أو إدخال مفتاح مخصص خاص بك:</string>
+    <string name="api_key_placeholder">أدخل AI Studio API Key (AIzaSy...)</string>
+    <string name="save">حفظ</string>
+    <string name="cancel">إلغاء</string>
+    <string name="reset_default">استعادة الافتراضي</string>
+    <string name="model_info">النموذج المستخدم: gemini-3.5-flash</string>
+    <string name="welcome_headline">مرحباً بك في Gemini Chat</string>
+    <string name="welcome_body">أنا مساعدك الذكي فائق السرعة، يمكنك التحدث معي باللغة العربية أو الإنجليزية في أي موضوع.</string>
+    <string name="suggestion_1">اشرح لي مفهوم الحوسبة السحابية ببساطة</string>
+    <string name="suggestion_2">Write a clean Kotlin Jetpack Compose snippet</string>
+    <string name="suggestion_3">لخص لي أهم نصائح لتنظيم الوقت وزيادة الإنتاجية</string>
+    <string name="suggestion_4">Help me draft a polite email requesting feedback</string>
+    <string name="generating_response">Gemini يكتب الآن...</string>
+    <string name="error_occurred">حدث خطأ أثناء الاتصال</string>
+    <string name="retry">إعادة المحاولة</string>
+    <string name="confirm_clear">هل أنت متأكد من مسح هذه المحادثة؟</string>
+</resources>
