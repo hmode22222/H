@@ -17,12 +17,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -30,6 +29,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -69,43 +70,43 @@ fun ChatMessageItem(
         verticalAlignment = Alignment.Top
     ) {
         if (!isUser) {
-            // AI Avatar
+            // Manus AI Avatar
             Box(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)
                     .background(
                         if (message.isError) MaterialTheme.colorScheme.errorContainer
-                        else MaterialTheme.colorScheme.primaryContainer
+                        else Color(0xFF1E1F30)
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = if (message.isError) Icons.Default.ErrorOutline else Icons.Default.AutoAwesome,
-                    contentDescription = "Gemini AI",
+                    imageVector = if (message.isError) Icons.Default.ErrorOutline else Icons.Default.Terminal,
+                    contentDescription = "Manus AI",
                     modifier = Modifier.size(20.dp),
                     tint = if (message.isError) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.primary
+                    else Color(0xFF60A5FA)
                 )
             }
             Spacer(modifier = Modifier.width(8.dp))
         }
 
         Column(
-            modifier = Modifier.widthIn(max = 320.dp),
+            modifier = Modifier.widthIn(max = 560.dp),
             horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
         ) {
             // Header for AI
             if (!isUser) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+                    modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
                 ) {
                     Text(
-                        text = "Gemini",
+                        text = "Manus Code Agent",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        color = Color(0xFF38BDF8)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
@@ -121,12 +122,12 @@ fun ChatMessageItem(
             val bubbleColor = when {
                 isUser -> MaterialTheme.colorScheme.primary
                 message.isError -> MaterialTheme.colorScheme.errorContainer
-                else -> MaterialTheme.colorScheme.surfaceVariant
+                else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
             }
             val contentColor = when {
                 isUser -> MaterialTheme.colorScheme.onPrimary
                 message.isError -> MaterialTheme.colorScheme.onErrorContainer
-                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                else -> MaterialTheme.colorScheme.onSurface
             }
 
             val bubbleShape = if (isUser) {
@@ -156,15 +157,14 @@ fun ChatMessageItem(
                 Column(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
                 ) {
-                    SelectionContainer {
-                        Text(
-                            text = message.content,
-                            style = MaterialTheme.typography.bodyLarge,
-                            lineHeight = 22.sp
-                        )
-                    }
-
                     if (isUser) {
+                        SelectionContainer {
+                            Text(
+                                text = message.content,
+                                style = MaterialTheme.typography.bodyLarge,
+                                lineHeight = 22.sp
+                            )
+                        }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = formattedTime,
@@ -173,6 +173,35 @@ fun ChatMessageItem(
                             fontSize = 10.sp,
                             modifier = Modifier.align(Alignment.End)
                         )
+                    } else {
+                        // AI Model response: Render formatted text and code blocks
+                        val parsedBlocks = remember(message.content) {
+                            MarkdownCodeParser.parse(message.content)
+                        }
+
+                        parsedBlocks.forEachIndexed { index, block ->
+                            when (block) {
+                                is FormattedContentBlock.TextBlock -> {
+                                    SelectionContainer {
+                                        Text(
+                                            text = block.text,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            lineHeight = 22.sp,
+                                            modifier = Modifier.padding(vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                                is FormattedContentBlock.CodeBlock -> {
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    CodeBlockView(
+                                        language = block.language,
+                                        code = block.code,
+                                        filename = block.filename
+                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                }
+                            }
+                        }
                     }
                 }
             }

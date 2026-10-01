@@ -1,14 +1,11 @@
 package com.example.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -30,11 +27,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DrawerValue
@@ -67,14 +68,21 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
+import com.example.data.api.GeminiModelRegistry
 import com.example.ui.components.ApiKeyDialog
+import com.example.ui.components.ArtifactsSheet
 import com.example.ui.components.ChatInputBar
 import com.example.ui.components.ChatMessageItem
+import com.example.ui.components.CodingActionBar
 import com.example.ui.components.ConversationDrawer
+import com.example.ui.components.FormattedContentBlock
+import com.example.ui.components.MarkdownCodeParser
+import com.example.ui.components.ModelSelectorSheet
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -92,6 +100,17 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    val currentModel = remember(uiState.selectedModelId) {
+        GeminiModelRegistry.getModelById(uiState.selectedModelId)
+    }
+
+    // Count code artifacts in current conversation
+    val codeArtifactsCount = remember(messages) {
+        messages.filter { it.role == "model" }.sumOf { msg ->
+            MarkdownCodeParser.parse(msg.content).count { it is FormattedContentBlock.CodeBlock }
+        }
+    }
+
     BackHandler(enabled = drawerState.isOpen) {
         coroutineScope.launch { drawerState.close() }
     }
@@ -103,7 +122,6 @@ fun ChatScreen(
         }
     }
 
-    // Scroll to bottom when messages update or loading state changes
     LaunchedEffect(messages.size, uiState.isLoading) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.size - 1)
@@ -140,37 +158,60 @@ fun ChatScreen(
             topBar = {
                 TopAppBar(
                     title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = stringResource(R.string.chat_title),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                modifier = Modifier.padding(2.dp)
+                        // Clickable Model & Mode Selector
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { viewModel.setModelSelectorOpen(true) }
+                                .testTag("top_model_selector_button")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                Box(
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(currentModel.badgeColor)),
+                                    contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.AutoAwesome,
+                                        imageVector = Icons.Default.Terminal,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
+                                        tint = Color.White,
                                         modifier = Modifier.size(12.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(3.dp))
+                                }
+
+                                Spacer(modifier = Modifier.width(6.dp))
+
+                                Column {
                                     Text(
-                                        text = "3.5 Flash",
+                                        text = currentModel.displayName,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "${uiState.selectedAgentMode.icon} ${uiState.selectedAgentMode.title}",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontSize = 10.sp,
-                                        fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                 }
+
+                                Spacer(modifier = Modifier.width(4.dp))
+
+                                Icon(
+                                    imageVector = Icons.Default.Tune,
+                                    contentDescription = "تغيير النموذج",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(14.dp)
+                                )
                             }
                         }
                     },
@@ -186,6 +227,30 @@ fun ChatScreen(
                         }
                     },
                     actions = {
+                        // Artifacts / Code Explorer Button
+                        IconButton(
+                            onClick = { viewModel.setArtifactsOpen(true) },
+                            modifier = Modifier.testTag("artifacts_button")
+                        ) {
+                            if (codeArtifactsCount > 0) {
+                                BadgedBox(badge = {
+                                    Badge { Text("$codeArtifactsCount") }
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Code,
+                                        contentDescription = "ملفات الكود",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Code,
+                                    contentDescription = "ملفات الكود",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
                         // Clear chat button
                         if (messages.isNotEmpty()) {
                             IconButton(
@@ -219,12 +284,22 @@ fun ChatScreen(
                 )
             },
             bottomBar = {
-                ChatInputBar(
-                    onSendMessage = { prompt ->
-                        viewModel.sendMessage(prompt)
-                    },
-                    isLoading = uiState.isLoading
-                )
+                Column {
+                    // Quick Developer Action Chips
+                    CodingActionBar(
+                        onPromptSelected = { template ->
+                            viewModel.sendMessage(template)
+                        }
+                    )
+
+                    // Input Bar
+                    ChatInputBar(
+                        onSendMessage = { prompt ->
+                            viewModel.sendMessage(prompt)
+                        },
+                        isLoading = uiState.isLoading
+                    )
+                }
             }
         ) { innerPadding ->
             Box(
@@ -234,8 +309,9 @@ fun ChatScreen(
                     .background(MaterialTheme.colorScheme.background)
             ) {
                 if (messages.isEmpty() && !uiState.isLoading) {
-                    // Empty welcome screen
                     EmptyChatWelcome(
+                        activeModelName = currentModel.displayName,
+                        activeModeName = uiState.selectedAgentMode.titleAr,
                         onSuggestionClick = { suggestion ->
                             viewModel.sendMessage(suggestion)
                         }
@@ -257,13 +333,40 @@ fun ChatScreen(
 
                         if (uiState.isLoading) {
                             item {
-                                ThinkingIndicator()
+                                ThinkingIndicator(phaseText = uiState.agentPhaseText)
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    // Model and Agent Mode Selector Sheet
+    if (uiState.isModelSelectorOpen) {
+        ModelSelectorSheet(
+            selectedModelId = uiState.selectedModelId,
+            selectedAgentMode = uiState.selectedAgentMode,
+            temperature = uiState.temperature,
+            onModelSelected = { modelId ->
+                viewModel.selectModel(modelId)
+            },
+            onAgentModeSelected = { mode ->
+                viewModel.selectAgentMode(mode)
+            },
+            onTemperatureChanged = { temp ->
+                viewModel.setTemperature(temp)
+            },
+            onDismissRequest = { viewModel.setModelSelectorOpen(false) }
+        )
+    }
+
+    // Artifacts / Code Files Sheet
+    if (uiState.isArtifactsOpen) {
+        ArtifactsSheet(
+            messages = messages,
+            onDismissRequest = { viewModel.setArtifactsOpen(false) }
+        )
     }
 
     // API Key Dialog
@@ -303,13 +406,13 @@ fun ChatScreen(
 }
 
 @Composable
-fun ThinkingIndicator() {
+fun ThinkingIndicator(phaseText: String?) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val alphaAnim by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
+        initialValue = 0.35f,
         targetValue = 1.0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(700),
+            animation = tween(650),
             repeatMode = RepeatMode.Reverse
         ),
         label = "alpha"
@@ -326,13 +429,13 @@ fun ThinkingIndicator() {
             modifier = Modifier
                 .size(36.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer),
+                .background(Color(0xFF1E1F30)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.Default.AutoAwesome,
+                imageVector = Icons.Default.Terminal,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
+                tint = Color(0xFF60A5FA),
                 modifier = Modifier
                     .size(20.dp)
                     .alpha(alphaAnim)
@@ -352,12 +455,12 @@ fun ThinkingIndicator() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = stringResource(R.string.generating_response),
+                    text = phaseText ?: stringResource(R.string.generating_response),
                     style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                // Three animated dots
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Box(
                         modifier = Modifier
@@ -385,6 +488,8 @@ fun ThinkingIndicator() {
 
 @Composable
 fun EmptyChatWelcome(
+    activeModelName: String,
+    activeModeName: String,
     onSuggestionClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -403,32 +508,66 @@ fun EmptyChatWelcome(
                 .background(
                     Brush.linearGradient(
                         colors = listOf(
-                            MaterialTheme.colorScheme.primary,
-                            MaterialTheme.colorScheme.tertiary
+                            Color(0xFF2563EB),
+                            Color(0xFF7C3AED)
                         )
                     )
                 ),
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.Default.AutoAwesome,
+                imageVector = Icons.Default.Terminal,
                 contentDescription = null,
                 tint = Color.White,
                 modifier = Modifier.size(38.dp)
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
         Text(
-            text = stringResource(R.string.welcome_headline),
+            text = "Manus Code Agent",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground,
             textAlign = TextAlign.Center
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // Badge indicating model and mode
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+            ) {
+                Text(
+                    text = "🤖 $activeModelName",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                )
+            }
+
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+            ) {
+                Text(
+                    text = "⚙️ $activeModeName",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
 
         Text(
             text = stringResource(R.string.welcome_body),
@@ -438,9 +577,9 @@ fun EmptyChatWelcome(
             modifier = Modifier.padding(horizontal = 16.dp)
         )
 
-        Spacer(modifier = Modifier.height(28.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
-        // Suggestions
+        // Coding Suggestions
         val suggestions = listOf(
             stringResource(R.string.suggestion_1),
             stringResource(R.string.suggestion_2),
@@ -461,7 +600,7 @@ fun EmptyChatWelcome(
                         .testTag("suggestion_chip_$index"),
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
                     ),
                     elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
@@ -472,7 +611,7 @@ fun EmptyChatWelcome(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Star,
+                            imageVector = Icons.Default.AutoAwesome,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp)
