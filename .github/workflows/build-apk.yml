@@ -1,33 +1,46 @@
-name: Build Android APK
+name: Android APK Build & Release
 
 on:
   push:
     branches: [ "main", "master" ]
+    tags:
+      - 'v*'
   pull_request:
     branches: [ "main", "master" ]
   workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Select build type to produce'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - 'both'
+          - 'release'
+          - 'debug'
 
 jobs:
   build:
+    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'temurin'
           cache: 'gradle'
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Prepare Environment and Keystore
+      - name: Configure Environment & Debug Keystore
         run: |
-          # Prepare .env file from .env.example or secrets
+          # 1. Setup .env file required by Secrets Gradle Plugin
           if [ -n "${{ secrets.GEMINI_API_KEY }}" ]; then
             echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
           elif [ -f .env.example ]; then
@@ -36,24 +49,68 @@ jobs:
             echo "GEMINI_API_KEY=MY_GEMINI_API_KEY" > .env
           fi
 
-          # Decode debug keystore if base64 file exists
+          # 2. Setup debug keystore for debug builds
           if [ -f debug.keystore.base64 ]; then
             base64 -d debug.keystore.base64 > debug.keystore
+          elif [ ! -f debug.keystore ]; then
+            keytool -genkey -v -keystore debug.keystore -storepass android \
+              -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 \
+              -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           fi
 
-          # Ensure gradlew has executable permissions
+          # 3. Ensure Gradle wrapper is executable
           chmod +x gradlew
+
+      - name: Setup Release Keystore Secrets
+        id: setup_release_keystore
+        run: |
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "::notice::Release keystore secret detected. Decoding to keystore file..."
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "${{ github.workspace }}/my-upload-key.jks"
+            echo "KEYSTORE_EXISTS=true" >> $GITHUB_OUTPUT
+          else
+            echo "::warning::KEYSTORE_BASE64 secret is not set. Generating temporary CI signing key..."
+            keytool -genkey -v -keystore "${{ github.workspace }}/my-upload-key.jks" \
+              -storepass "${{ secrets.STORE_PASSWORD || 'android' }}" \
+              -alias upload \
+              -keypass "${{ secrets.KEY_PASSWORD || 'android' }}" \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Release CI,O=Android,C=US"
+            echo "KEYSTORE_EXISTS=fallback" >> $GITHUB_OUTPUT
+          fi
 
       - name: Run Unit Tests
         run: ./gradlew testDebugUnitTest --no-daemon
 
       - name: Build Debug APK
+        if: ${{ github.event.inputs.build_type != 'release' }}
         run: ./gradlew assembleDebug --no-daemon
 
-      - name: Upload APK Artifact
+      - name: Build Release APK
+        if: ${{ github.event.inputs.build_type != 'debug' }}
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || 'android' }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'android' }}
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Clean Keystore File from Runner Workspace
+        if: always()
+        run: |
+          rm -f "${{ github.workspace }}/my-upload-key.jks"
+
+      - name: Upload Debug APK Artifact
+        if: ${{ github.event.inputs.build_type != 'release' }}
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          name: Gemini-Chat-Debug-APK
+          path: app/build/outputs/apk/debug/*.apk
           retention-days: 14
+
+      - name: Upload Release APK Artifact
+        if: ${{ github.event.inputs.build_type != 'debug' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gemini-Chat-Release-APK
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 30
