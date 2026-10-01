@@ -1,7 +1,9 @@
 package com.example.ui.components
 
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,16 +22,24 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,7 +49,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,6 +62,7 @@ import java.util.Locale
 fun ChatMessageItem(
     message: ChatMessageEntity,
     onDelete: () -> Unit,
+    onSaveSnippet: ((title: String, lang: String, code: String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val isUser = message.role == "user"
@@ -60,6 +70,7 @@ fun ChatMessageItem(
     val context = LocalContext.current
     val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
     val formattedTime = timeFormat.format(Date(message.timestamp))
+    var isThinkingExpanded by remember { mutableStateOf(false) }
 
     Row(
         modifier = modifier
@@ -93,7 +104,7 @@ fun ChatMessageItem(
         }
 
         Column(
-            modifier = Modifier.widthIn(max = 560.dp),
+            modifier = Modifier.widthIn(max = 580.dp),
             horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
         ) {
             // Header for AI
@@ -157,6 +168,33 @@ fun ChatMessageItem(
                 Column(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
                 ) {
+                    // Image attachment badge if user attached an image
+                    if (isUser && message.imageUri != null) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f),
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Image,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "تم إرفاق صورة/مخطط للتحليل",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            }
+                        }
+                    }
+
                     if (isUser) {
                         SelectionContainer {
                             Text(
@@ -174,12 +212,12 @@ fun ChatMessageItem(
                             modifier = Modifier.align(Alignment.End)
                         )
                     } else {
-                        // AI Model response: Render formatted text and code blocks
+                        // AI Model response: Render formatted text and syntax-highlighted code blocks
                         val parsedBlocks = remember(message.content) {
                             MarkdownCodeParser.parse(message.content)
                         }
 
-                        parsedBlocks.forEachIndexed { index, block ->
+                        parsedBlocks.forEach { block ->
                             when (block) {
                                 is FormattedContentBlock.TextBlock -> {
                                     SelectionContainer {
@@ -196,7 +234,8 @@ fun ChatMessageItem(
                                     CodeBlockView(
                                         language = block.language,
                                         code = block.code,
-                                        filename = block.filename
+                                        filename = block.filename,
+                                        onSaveToLibrary = onSaveSnippet
                                     )
                                     Spacer(modifier = Modifier.height(6.dp))
                                 }

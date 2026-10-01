@@ -23,7 +23,14 @@ data class ContentItem(
 
 @JsonClass(generateAdapter = true)
 data class PartItem(
-    @param:Json(name = "text") val text: String? = null
+    @param:Json(name = "text") val text: String? = null,
+    @param:Json(name = "inlineData") val inlineData: InlineData? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class InlineData(
+    @param:Json(name = "mimeType") val mimeType: String,
+    @param:Json(name = "data") val data: String
 )
 
 @JsonClass(generateAdapter = true)
@@ -59,7 +66,7 @@ data class GeminiApiError(
 )
 
 /**
- * All supported Gemini models adhering strictly to the official gemini-api skill.
+ * Supported Gemini models adhering strictly to gemini-api skill.
  */
 data class GeminiModelInfo(
     val id: String,
@@ -73,7 +80,7 @@ data class GeminiModelInfo(
 )
 
 object GeminiModelRegistry {
-    val FLAGSHIP_CODE_MODEL = "gemini-3.1-pro-preview"
+    const val FLAGSHIP_CODE_MODEL = "gemini-3.1-pro-preview"
 
     val AVAILABLE_MODELS = listOf(
         GeminiModelInfo(
@@ -83,6 +90,7 @@ object GeminiModelRegistry {
             description = "أقوى نموذج للاستدلال العميق، وهندسة البرمجيات المعقدة، وحل الخوارزميات وتصحيح الأخطاء الصعبة.",
             isFlagshipCoding = true,
             isDefault = true,
+            supportsVision = true,
             badgeColor = 0xFF6366F1
         ),
         GeminiModelInfo(
@@ -180,5 +188,64 @@ enum class CodingAgentMode(
         icon = "🔌",
         descriptionAr = "تصميم واجهات REST/GraphQL، وهياكل قواعد البيانات SQL/NoSQL وRoom Entities.",
         systemPromptDirective = "Role: API & Database Architect. Design schemas, database relations, migrations, query optimizations, and RESTful API endpoints."
+    )
+}
+
+/**
+ * Developer Target Tech Stacks.
+ */
+enum class TechStack(
+    val title: String,
+    val icon: String,
+    val tag: String,
+    val promptContext: String
+) {
+    ANDROID_COMPOSE(
+        title = "Android Compose",
+        icon = "📱",
+        tag = "Kotlin",
+        promptContext = "Primary Framework: Kotlin, Jetpack Compose, Material 3, ViewModel, Coroutines/Flow, Room DB, and Clean Architecture."
+    ),
+    FULLSTACK_TS(
+        title = "React & TS",
+        icon = "🌐",
+        tag = "TypeScript",
+        promptContext = "Primary Framework: React, Next.js, TypeScript, TailwindCSS, Server Actions, and REST/GraphQL APIs."
+    ),
+    PYTHON_AI(
+        title = "Python & AI",
+        icon = "🐍",
+        tag = "Python",
+        promptContext = "Primary Framework: Python 3.12+, FastAPI, PyTorch, NumPy/Pandas, with strict type hinting and PEP 8 guidelines."
+    ),
+    JAVA_SPRING(
+        title = "Java Spring",
+        icon = "☕",
+        tag = "Java",
+        promptContext = "Primary Framework: Java 21+, Spring Boot 3, Spring Data JPA, Hibernate, and clean layered architecture."
+    ),
+    RUST_SYSTEMS(
+        title = "Rust Systems",
+        icon = "🦀",
+        tag = "Rust",
+        promptContext = "Primary Framework: Rust, Tokio async, safe memory patterns, modular crates, and Zero-Cost Abstractions."
+    ),
+    SQL_DATABASE(
+        title = "SQL & DB",
+        icon = "🗄️",
+        tag = "SQL",
+        promptContext = "Primary Framework: PostgreSQL, SQLite/Room, Schema migrations, Indexes, ACID compliance, and query optimizations."
+    ),
+    IOS_SWIFTUI(
+        title = "iOS SwiftUI",
+        icon = "🍏",
+        tag = "Swift",
+        promptContext = "Primary Framework: Swift 6, SwiftUI, Swift Concurrency (async/await), and MVVM architecture."
+    ),
+    FLUTTER_DART(
+        title = "Flutter Dart",
+        icon = "🚀",
+        tag = "Dart",
+        promptContext = "Primary Framework: Flutter, Dart, Riverpod/Bloc, Material 3, and Clean Architecture."
     )
 }

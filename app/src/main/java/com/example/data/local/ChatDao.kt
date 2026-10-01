@@ -41,4 +41,17 @@ interface ChatDao {
 
     @Query("UPDATE chat_messages SET content = :content, isError = :isError WHERE id = :id")
     suspend fun updateMessage(id: Long, content: String, isError: Boolean)
+
+    // Saved Snippets
+    @Query("SELECT * FROM saved_snippets ORDER BY timestamp DESC")
+    fun getAllSnippets(): Flow<List<SavedSnippetEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSnippet(snippet: SavedSnippetEntity): Long
+
+    @Query("DELETE FROM saved_snippets WHERE id = :id")
+    suspend fun deleteSnippetById(id: Long)
+
+    @Query("SELECT * FROM saved_snippets WHERE title LIKE '%' || :query || '%' OR code LIKE '%' || :query || '%' OR language LIKE '%' || :query || '%' ORDER BY timestamp DESC")
+    fun searchSnippets(query: String): Flow<List<SavedSnippetEntity>>
 }

@@ -24,5 +24,7 @@ data class ChatMessageEntity(
     val role: String, // "user" or "model"
     val content: String,
     val timestamp: Long = System.currentTimeMillis(),
-    val isError: Boolean = false
+    val isError: Boolean = false,
+    val imageUri: String? = null,
+    val thoughtSteps: String? = null
 )

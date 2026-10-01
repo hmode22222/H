@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Key
@@ -83,6 +84,7 @@ import com.example.ui.components.ConversationDrawer
 import com.example.ui.components.FormattedContentBlock
 import com.example.ui.components.MarkdownCodeParser
 import com.example.ui.components.ModelSelectorSheet
+import com.example.ui.components.SnippetLibrarySheet
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -94,6 +96,7 @@ fun ChatScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val conversations by viewModel.conversations.collectAsStateWithLifecycle()
     val messages by viewModel.messages.collectAsStateWithLifecycle()
+    val savedSnippets by viewModel.savedSnippets.collectAsStateWithLifecycle()
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
@@ -197,7 +200,7 @@ fun ChatScreen(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        text = "${uiState.selectedAgentMode.icon} ${uiState.selectedAgentMode.title}",
+                                        text = "${uiState.selectedAgentMode.icon} ${uiState.selectedAgentMode.title} • ${uiState.selectedTechStack.icon}",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontSize = 10.sp,
                                         color = MaterialTheme.colorScheme.primary
@@ -227,6 +230,30 @@ fun ChatScreen(
                         }
                     },
                     actions = {
+                        // Saved Snippets Library Button
+                        IconButton(
+                            onClick = { viewModel.setSnippetLibraryOpen(true) },
+                            modifier = Modifier.testTag("snippets_library_button")
+                        ) {
+                            if (savedSnippets.isNotEmpty()) {
+                                BadgedBox(badge = {
+                                    Badge { Text("${savedSnippets.size}") }
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Bookmark,
+                                        contentDescription = "مكتبة الأكواد",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Bookmark,
+                                    contentDescription = "مكتبة الأكواد",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
                         // Artifacts / Code Explorer Button
                         IconButton(
                             onClick = { viewModel.setArtifactsOpen(true) },
@@ -292,10 +319,12 @@ fun ChatScreen(
                         }
                     )
 
-                    // Input Bar
+                    // Input Bar with Tech Stack switcher & Photo Picker
                     ChatInputBar(
-                        onSendMessage = { prompt ->
-                            viewModel.sendMessage(prompt)
+                        selectedTechStack = uiState.selectedTechStack,
+                        onSelectTechStack = { stack -> viewModel.selectTechStack(stack) },
+                        onSendMessage = { prompt, imageUri ->
+                            viewModel.sendMessage(prompt, imageUri)
                         },
                         isLoading = uiState.isLoading
                     )
@@ -312,6 +341,7 @@ fun ChatScreen(
                     EmptyChatWelcome(
                         activeModelName = currentModel.displayName,
                         activeModeName = uiState.selectedAgentMode.titleAr,
+                        activeStackName = uiState.selectedTechStack.title,
                         onSuggestionClick = { suggestion ->
                             viewModel.sendMessage(suggestion)
                         }
@@ -327,7 +357,10 @@ fun ChatScreen(
                         items(messages, key = { it.id }) { message ->
                             ChatMessageItem(
                                 message = message,
-                                onDelete = { viewModel.deleteMessage(message.id) }
+                                onDelete = { viewModel.deleteMessage(message.id) },
+                                onSaveSnippet = { title, lang, code ->
+                                    viewModel.saveSnippet(title, lang, code)
+                                }
                             )
                         }
 
@@ -366,6 +399,19 @@ fun ChatScreen(
         ArtifactsSheet(
             messages = messages,
             onDismissRequest = { viewModel.setArtifactsOpen(false) }
+        )
+    }
+
+    // Saved Snippets Library Sheet
+    if (uiState.isSnippetLibraryOpen) {
+        SnippetLibrarySheet(
+            snippets = savedSnippets,
+            onDeleteSnippet = { id -> viewModel.deleteSnippet(id) },
+            onUseSnippet = { snippetCode ->
+                viewModel.sendMessage(snippetCode)
+                viewModel.setSnippetLibraryOpen(false)
+            },
+            onDismissRequest = { viewModel.setSnippetLibraryOpen(false) }
         )
     }
 
@@ -490,6 +536,7 @@ fun ThinkingIndicator(phaseText: String?) {
 fun EmptyChatWelcome(
     activeModelName: String,
     activeModeName: String,
+    activeStackName: String,
     onSuggestionClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -533,9 +580,9 @@ fun EmptyChatWelcome(
             textAlign = TextAlign.Center
         )
 
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
-        // Badge indicating model and mode
+        // Badges indicating model, mode, and tech stack
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -562,6 +609,19 @@ fun EmptyChatWelcome(
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                )
+            }
+
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f)
+            ) {
+                Text(
+                    text = "💻 $activeStackName",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.tertiary,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                 )
             }

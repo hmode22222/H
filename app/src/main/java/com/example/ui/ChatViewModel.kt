@@ -2,15 +2,22 @@ package com.example.ui
 
 import android.app.Application
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.util.Base64
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.BuildConfig
 import com.example.data.api.CodingAgentMode
 import com.example.data.api.GeminiModelRegistry
+import com.example.data.api.TechStack
 import com.example.data.local.ChatDatabase
 import com.example.data.local.ChatMessageEntity
 import com.example.data.local.ConversationEntity
+import com.example.data.local.SavedSnippetEntity
 import com.example.data.repository.ChatRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +28,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 
 data class ChatUiState(
     val currentConversationId: Long? = null,
@@ -28,10 +37,12 @@ data class ChatUiState(
     val agentPhaseText: String? = null,
     val selectedModelId: String = GeminiModelRegistry.FLAGSHIP_CODE_MODEL,
     val selectedAgentMode: CodingAgentMode = CodingAgentMode.FULL_STACK_ARCHITECT,
+    val selectedTechStack: TechStack = TechStack.ANDROID_COMPOSE,
     val temperature: Float = 0.2f,
     val isApiKeyDialogOpen: Boolean = false,
     val isModelSelectorOpen: Boolean = false,
     val isArtifactsOpen: Boolean = false,
+    val isSnippetLibraryOpen: Boolean = false,
     val isClearConfirmDialogOpen: Boolean = false,
     val customApiKey: String = "",
     val effectiveApiKey: String = "",
@@ -49,6 +60,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     val conversations: StateFlow<List<ConversationEntity>>
     val messages: StateFlow<List<ChatMessageEntity>>
+    val savedSnippets: StateFlow<List<SavedSnippetEntity>>
 
     init {
         val database = ChatDatabase.getInstance(application)
@@ -66,6 +78,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         } catch (_: Exception) {
             CodingAgentMode.FULL_STACK_ARCHITECT
         }
+        val savedTechStr = prefs.getString("selected_tech_stack", TechStack.ANDROID_COMPOSE.name)
+        val savedTech = try {
+            TechStack.valueOf(savedTechStr ?: TechStack.ANDROID_COMPOSE.name)
+        } catch (_: Exception) {
+            TechStack.ANDROID_COMPOSE
+        }
         val savedTemp = prefs.getFloat("coding_temperature", 0.2f)
 
         _uiState.value = _uiState.value.copy(
@@ -73,10 +91,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             effectiveApiKey = effective,
             selectedModelId = savedModel,
             selectedAgentMode = savedMode,
+            selectedTechStack = savedTech,
             temperature = savedTemp
         )
 
         conversations = repository.allConversations.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+        savedSnippets = repository.allSnippets.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
@@ -166,6 +191,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    fun selectTechStack(stack: TechStack) {
+        prefs.edit().putString("selected_tech_stack", stack.name).apply()
+        _uiState.value = _uiState.value.copy(
+            selectedTechStack = stack,
+            snackbarMessage = "تم اختيار التقنية: ${stack.title}"
+        )
+    }
+
     fun setTemperature(temp: Float) {
         prefs.edit().putFloat("coding_temperature", temp).apply()
         _uiState.value = _uiState.value.copy(temperature = temp)
@@ -179,9 +212,27 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(isArtifactsOpen = open)
     }
 
-    fun sendMessage(text: String) {
+    fun setSnippetLibraryOpen(open: Boolean) {
+        _uiState.value = _uiState.value.copy(isSnippetLibraryOpen = open)
+    }
+
+    fun saveSnippet(title: String, language: String, code: String) {
+        viewModelScope.launch {
+            repository.saveSnippet(title = title, language = language, code = code)
+            _uiState.value = _uiState.value.copy(snackbarMessage = "تم حفظ الكود في المكتبة بنجاح!")
+        }
+    }
+
+    fun deleteSnippet(id: Long) {
+        viewModelScope.launch {
+            repository.deleteSnippet(id)
+            _uiState.value = _uiState.value.copy(snackbarMessage = "تم حذف الكود من المكتبة")
+        }
+    }
+
+    fun sendMessage(text: String, imageUri: Uri? = null) {
         val prompt = text.trim()
-        if (prompt.isBlank()) return
+        if (prompt.isBlank() && imageUri == null) return
 
         val convId = _uiState.value.currentConversationId ?: return
         val key = _uiState.value.effectiveApiKey.ifBlank { BuildConfig.GEMINI_API_KEY }
@@ -197,8 +248,27 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isLoading = true,
-                agentPhaseText = "🧠 [Manus] تحليل المتطلبات وتخطيط المعمارية..."
+                agentPhaseText = if (imageUri != null) "📸 [Manus Vision] فحص وتحليل الصورة والمخطط..."
+                else "🧠 [Manus] تحليل المتطلبات وتخطيط المعمارية..."
             )
+
+            var base64Image: String? = null
+            if (imageUri != null) {
+                base64Image = withContext(Dispatchers.IO) {
+                    try {
+                        val inputStream = getApplication<Application>().contentResolver.openInputStream(imageUri)
+                        val bitmap = BitmapFactory.decodeStream(inputStream)
+                        inputStream?.close()
+                        if (bitmap != null) {
+                            val outputStream = ByteArrayOutputStream()
+                            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
+                            Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
+                        } else null
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+            }
 
             // Autonomous phase progress animation
             val phaseJob = launch {
@@ -216,13 +286,22 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
+            // If an image is provided and current model does not support vision, auto-route to gemini-2.5-flash-image
+            val targetModel = if (base64Image != null && !_uiState.value.selectedModelId.contains("pro") && !_uiState.value.selectedModelId.contains("image")) {
+                "gemini-2.5-flash-image"
+            } else {
+                _uiState.value.selectedModelId
+            }
+
             try {
                 repository.sendMessage(
                     conversationId = convId,
-                    userPrompt = prompt,
+                    userPrompt = if (prompt.isBlank()) "قم بتحليل هذا المخطط/الصورة واستخرج الكود المطلوب." else prompt,
                     apiKey = key,
-                    modelId = _uiState.value.selectedModelId,
+                    modelId = targetModel,
                     agentMode = _uiState.value.selectedAgentMode,
+                    techStack = _uiState.value.selectedTechStack,
+                    imageBase64 = base64Image,
                     temperature = _uiState.value.temperature
                 )
             } finally {
